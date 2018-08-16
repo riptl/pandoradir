@@ -8,16 +8,16 @@ const templateStr = `
 <body>
 <h1>Index of {{.Path}}</h1>
 <pre>
-<a href=".">Name</a> <a href=".">Last modified</a> <a href=".">Size</a>
+<a href=".">Name</a>                  <a href=".">Last modified</a>        <a href=".">Size</a>
 <hr>
 {{- if .ParentDir -}}
 <a href="{{ .ParentDir }}">Parent Directory</a>
 {{ end -}}
 {{- range $key, $value := .Dirs -}}
-<a href="{{ $value.Link }}">{{ $value.Link }}</a> {{ $value.Time }} -
+<a href="{{ $value.Link }}">{{ $value.Link }}</a>     {{ $value.Time }}     -
 {{ end -}}
 {{- range $key, $value := .Files -}}
-<a href="{{ $value.Link }}">{{ $value.Link }}</a> {{ $value.Time }} {{ $value.Size }}
+<a href="{{ $value.Link }}">{{ $value.Link }}</a>      {{ $value.Time }}     {{ $value.Size }}
 {{ end -}}
 <hr>
 </pre>
