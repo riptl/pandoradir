@@ -1,9 +1,11 @@
 package main
 
 import (
+	"github.com/valyala/fasthttp"
 	"hash/crc64"
-	"net/http"
+	"net"
 	"strconv"
+	"time"
 )
 
 func fileSize(fileId uint64) uint32 {
@@ -17,13 +19,18 @@ func fileSize(fileId uint64) uint32 {
 	return bin.Uint32(extraData[0:4])
 }
 
-func serveFile(res http.ResponseWriter, req *http.Request, fileId uint64) {
-	if req.Method == "HEAD" {
-		res.Header().Set("Content-Length", strconv.FormatUint(uint64(fileSize(fileId)), 10))
-		res.Header().Set("Accept-Ranges", "bytes")
-		res.WriteHeader(http.StatusOK)
+func serveFile(ctx *fasthttp.RequestCtx, fileId uint64) {
+	switch string(ctx.Method()) {
+	case "HEAD":
+		ctx.SetStatusCode(200)
+		ctx.Response.Header.Set(
+			"Content-Length", strconv.FormatUint(uint64(fileSize(fileId)), 10))
+		ctx.Response.Header.Set(
+			"Accept-Ranges", "bytes")
 		return
+	case "GET":
+		ctx.Hijack(func(c net.Conn) {
+			time.Sleep(30 * time.Second)
+		})
 	}
-
-	res.WriteHeader(http.StatusForbidden)
 }

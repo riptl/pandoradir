@@ -1,15 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/binary"
-	"flag"
 	"fmt"
+	"github.com/valyala/fasthttp"
 	"hash/crc32"
 	"hash/crc64"
 	"html/template"
-	"io/ioutil"
-	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -29,52 +27,39 @@ const (
 )
 
 func main() {
-	var nologging bool
-	flag.BoolVar(&nologging, "quiet", false, "Suppress logging output")
-	flag.Parse()
-
-	args := flag.Args()
-	if len(args) != 1 {
-		fmt.Fprintf(os.Stderr, "Usage: %s [flags] <bind>\n",
+	if len(os.Args) != 2 {
+		fmt.Fprintf(os.Stderr, "Usage: %s <bind>\n",
 			filepath.Base(os.Args[0]))
 		return
 	}
-	bind := args[0]
-
-	var fatal func(interface{})
-	if nologging {
-		log.SetOutput(ioutil.Discard)
-		fatal = func(i interface{}) {
-			fmt.Fprintln(os.Stderr, i)
-			os.Exit(1)
-		}
-	} else {
-		fatal = func(i interface{}) {
-			log.Fatal(i)
-		}
-	}
+	bind := os.Args[1]
 
 	t := template.New("listing")
 	var err error
 	listingTemplate, err = t.Parse(templateStr)
 	if err != nil {
-		fatal(err)
+		fmt.Println(err)
+		return
 	}
 
-	http.HandleFunc("/", logHandler(baseHandler))
-
-	log.Print("Serving at ", bind)
-	fatal(http.ListenAndServe(bind, nil))
+	fmt.Println("Serving at", bind)
+	err = fasthttp.ListenAndServe(bind, baseHandler)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }
 
-func baseHandler(res http.ResponseWriter, req *http.Request) {
-	path := req.URL.Path
+func baseHandler(ctx *fasthttp.RequestCtx) {
+	path := string(ctx.Path())
 	path = strings.TrimPrefix(path, "/")
 	path = strings.TrimSuffix(path, ".bin")
 
+	ctx.Response.Header.Set("Server", "pandoradir")
+
 	// Base dir
-	if path == "" && req.Method == "GET" {
-		serveRootListing(res)
+	if bytes.Equal(ctx.Method(), []byte("GET")) && path == "" {
+		serveRootListing(ctx)
 		return
 	}
 
@@ -85,14 +70,14 @@ func baseHandler(res http.ResponseWriter, req *http.Request) {
 		case 16:
 			part, err := strconv.ParseUint(partHex, 16, 64)
 			if err != nil {
-				notFound(res)
+				ctx.SetStatusCode(404)
 				return
 			}
 			parts = append(parts, part)
 		case 0:
 			continue
 		default:
-			notFound(res)
+			ctx.SetStatusCode(404)
 			return
 		}
 	}
@@ -105,7 +90,7 @@ func baseHandler(res http.ResponseWriter, req *http.Request) {
 		// Verify checksum
 		crc := uint32(part >> 32)
 		if crc32.Checksum(idBytes[:], crcTable) != crc {
-			notFound(res)
+			ctx.SetStatusCode(404)
 			return
 		}
 
@@ -113,23 +98,18 @@ func baseHandler(res http.ResponseWriter, req *http.Request) {
 		kind := byte(id) // & 0xFF
 		if i < len(parts)-1 {
 			if kind != KindDir {
-				notFound(res)
+				ctx.SetStatusCode(404)
 				return
 			}
 		} else {
 			switch kind {
 			case KindFile:
-				serveFile(res, req, parts[len(parts)-1])
+				serveFile(ctx, parts[len(parts)-1])
 			case KindDir:
-				serveListing(res, req, parts)
+				serveListing(ctx, parts)
 			default:
-				notFound(res)
+				ctx.SetStatusCode(404)
 			}
 		}
 	}
-}
-
-func notFound(res http.ResponseWriter) {
-	res.WriteHeader(404)
-	res.Write([]byte("404 Not Found."))
 }

@@ -3,10 +3,9 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"github.com/valyala/fasthttp"
 	"hash/crc32"
 	"hash/crc64"
-	"log"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -61,23 +60,28 @@ func genFullPath(ids []uint64) string {
 	return buf.String()
 }
 
-func serveRootListing(res http.ResponseWriter) {
+func serveRootListing(ctx *fasthttp.RequestCtx) {
 	info := templateInfo{Path: "/"}
 	genListingInfo(&info, 0)
 
-	res.Header().Set("content-type", "text/html")
-	res.WriteHeader(http.StatusOK)
-	err := listingTemplate.Execute(res, info)
+	ctx.SetStatusCode(200)
+	ctx.Response.Header.Set(
+		"content-type", "text/html")
+	err := listingTemplate.Execute(ctx.Response.BodyWriter(), info)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 
-func serveListing(res http.ResponseWriter, req *http.Request, ids []uint64) {
-	if req.Method != "GET" {
-		notFound(res)
+func serveListing(ctx *fasthttp.RequestCtx, ids []uint64) {
+	if !bytes.Equal(ctx.Method(), []byte("GET")) {
+		ctx.SetStatusCode(404)
 		return
 	}
+
+	ctx.SetStatusCode(200)
+	ctx.Response.Header.Set(
+		"content-type", "text/html")
 
 	info := templateInfo{Path: genFullPath(ids)}
 	pathNoTrailingSlash := strings.TrimSuffix(info.Path, "/")
@@ -85,10 +89,9 @@ func serveListing(res http.ResponseWriter, req *http.Request, ids []uint64) {
 	info.ParentDir = info.Path[:lastSlash+1]
 	genListingInfo(&info, ids[len(ids)-1])
 
-	res.WriteHeader(http.StatusOK)
-	err := listingTemplate.Execute(res, info)
+	err := listingTemplate.Execute(ctx.Response.BodyWriter(), info)
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
 }
 
