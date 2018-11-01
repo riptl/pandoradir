@@ -7,7 +7,6 @@ import (
 	"hash/crc32"
 	"hash/crc64"
 	"strings"
-	"time"
 )
 
 func genIDs(id uint64) (parts []uint64) {
@@ -62,7 +61,7 @@ func genFullPath(ids []uint64) string {
 
 func serveRootListing(ctx *fasthttp.RequestCtx) {
 	info := templateInfo{Path: "/"}
-	genListingInfo(&info, 0)
+	genListingInfoCRC(&info, 0)
 
 	ctx.SetStatusCode(200)
 	ctx.Response.Header.Set(
@@ -85,12 +84,12 @@ func serveListing(ctx *fasthttp.RequestCtx, ids []uint64) {
 	pathNoTrailingSlash := strings.TrimSuffix(info.Path, "/")
 	lastSlash := strings.LastIndexByte(pathNoTrailingSlash, '/')
 	info.ParentDir = info.Path[:lastSlash+1]
-	genListingInfo(&info, ids[len(ids)-1])
+	genListingInfoCRC(&info, ids[len(ids)-1])
 
 	writeListing(ctx, &info)
 }
 
-func genListingInfo(info *templateInfo, lastID uint64) {
+func genListingInfoCRC(info *templateInfo, lastID uint64) {
 	ids := genIDs(lastID)
 	files := ids[:len(ids)/2]
 	dirs := ids[len(ids)/2:]
@@ -109,10 +108,9 @@ func genListingInfo(info *templateInfo, lastID uint64) {
 			crc64.Checksum(extraData[:], crc64Table))
 
 		// Time
-		timeUnix := int64(bin.Uint64(extraData[0:8]))
+		timeUnix := bin.Uint64(extraData[0:8])
 		timeUnix %= maxTimestamp
-		timestamp := time.Unix(timeUnix, 0)
-		info.Dirs[i].Time = timestamp.Format("2006-01-02 15:04")
+		info.Dirs[i].Time = timeUnix
 	}
 
 	for i, fileId := range files {
@@ -131,9 +129,8 @@ func genListingInfo(info *templateInfo, lastID uint64) {
 		info.Files[i].Size = bin.Uint32(extraData[0:4])
 
 		// Time
-		timeUnix := int64(bin.Uint64(extraData[8:16]))
+		timeUnix := bin.Uint64(extraData[8:16])
 		timeUnix %= maxTimestamp
-		timestamp := time.Unix(timeUnix, 0)
-		info.Files[i].Time = timestamp.Format("2006-01-02 15:04")
+		info.Files[i].Time = timeUnix
 	}
 }

@@ -17,7 +17,7 @@ var crcTable = crc32.IEEETable
 var crc64Table = crc64.MakeTable(crc64.ECMA)
 var bin = binary.BigEndian
 
-const maxTimestamp = int64(1257894000)
+const maxTimestamp = uint64(1257894000)
 
 const (
 	KindFile = byte(iota)
