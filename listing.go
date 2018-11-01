@@ -67,10 +67,8 @@ func serveRootListing(ctx *fasthttp.RequestCtx) {
 	ctx.SetStatusCode(200)
 	ctx.Response.Header.Set(
 		"content-type", "text/html")
-	err := listingTemplate.Execute(ctx.Response.BodyWriter(), info)
-	if err != nil {
-		panic(err)
-	}
+
+	writeListing(ctx, &info)
 }
 
 func serveListing(ctx *fasthttp.RequestCtx, ids []uint64) {
@@ -89,10 +87,7 @@ func serveListing(ctx *fasthttp.RequestCtx, ids []uint64) {
 	info.ParentDir = info.Path[:lastSlash+1]
 	genListingInfo(&info, ids[len(ids)-1])
 
-	err := listingTemplate.Execute(ctx.Response.BodyWriter(), info)
-	if err != nil {
-		panic(err)
-	}
+	writeListing(ctx, &info)
 }
 
 func genListingInfo(info *templateInfo, lastID uint64) {

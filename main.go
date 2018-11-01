@@ -7,7 +7,6 @@ import (
 	"github.com/valyala/fasthttp"
 	"hash/crc32"
 	"hash/crc64"
-	"html/template"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,7 +16,6 @@ import (
 var crcTable = crc32.IEEETable
 var crc64Table = crc64.MakeTable(crc64.ECMA)
 var bin = binary.BigEndian
-var listingTemplate *template.Template
 
 const maxTimestamp = int64(1257894000)
 
@@ -34,16 +32,8 @@ func main() {
 	}
 	bind := os.Args[1]
 
-	t := template.New("listing")
-	var err error
-	listingTemplate, err = t.Parse(templateStr)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
 	fmt.Println("Serving at", bind)
-	err = fasthttp.ListenAndServe(bind, baseHandler)
+	err := fasthttp.ListenAndServe(bind, baseHandler)
 	if err != nil {
 		fmt.Println(err)
 		return
