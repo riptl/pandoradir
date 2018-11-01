@@ -14,7 +14,7 @@ const templateStr = `
 <a href="{{ .ParentDir }}">Parent Directory</a>
 {{ end -}}
 {{- range $key, $value := .Dirs -}}
-<a href="{{ $value.Link }}">{{ $value.Link }}</a>     {{ $value.Time }}     -
+<a href="{{ $value.Link }}">{{ $value.Show }}</a>{{ $value.Pad }} {{ $value.Time }}     -
 {{ end -}}
 {{- range $key, $value := .Files -}}
 <a href="{{ $value.Link }}">{{ $value.Link }}</a>      {{ $value.Time }}     {{ $value.Size }}
@@ -27,6 +27,8 @@ const templateStr = `
 
 type templateDir struct {
 	Link string
+	Show string
+	Pad  string
 	Time string
 }
 

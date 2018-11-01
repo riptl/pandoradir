@@ -7,10 +7,11 @@ import (
 	"hash/crc32"
 	"hash/crc64"
 	"html/template"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ var crcTable = crc32.IEEETable
 var crc64Table = crc64.MakeTable(crc64.ECMA)
 var bin = binary.BigEndian
 var listingTemplate *template.Template
+var recursive, recursivePad string
 
 const maxTimestamp = int64(1257894000)
 
@@ -31,7 +33,20 @@ const (
 func main() {
 	var nologging bool
 	flag.BoolVar(&nologging, "quiet", false, "Suppress logging output")
+	flag.StringVar(&recursive, "recursive", "", "Add a folder to each listing that symlinks to the root directory")
 	flag.Parse()
+
+	recursive = path.Clean(recursive)
+	recursive = strings.TrimSuffix(recursive, "/")
+	recursive = url.PathEscape(recursive)
+	if recursive != "" {
+		for i := len(recursive); i < 20; i++ {
+			recursivePad += " "
+		}
+	}
+	if recursive == "." {
+		recursive = ""
+	}
 
 	args := flag.Args()
 	if len(args) != 1 {
@@ -41,46 +56,32 @@ func main() {
 	}
 	bind := args[0]
 
-	var fatal func(interface{})
-	if nologging {
-		log.SetOutput(ioutil.Discard)
-		fatal = func(i interface{}) {
-			fmt.Fprintln(os.Stderr, i)
-			os.Exit(1)
-		}
-	} else {
-		fatal = func(i interface{}) {
-			log.Fatal(i)
-		}
-	}
-
 	t := template.New("listing")
 	var err error
 	listingTemplate, err = t.Parse(templateStr)
 	if err != nil {
-		fatal(err)
+		log.Fatal(err)
 	}
 
 	http.HandleFunc("/", logHandler(baseHandler))
 
 	log.Print("Serving at ", bind)
-	fatal(http.ListenAndServe(bind, nil))
+	log.Fatal(http.ListenAndServe(bind, nil))
 }
 
 func baseHandler(res http.ResponseWriter, req *http.Request) {
-	path := req.URL.Path
-	path = strings.TrimPrefix(path, "/")
-	path = strings.TrimSuffix(path, ".bin")
-
-	// Base dir
-	if path == "" && req.Method == "GET" {
-		serveRootListing(res)
-		return
-	}
+	p := req.URL.Path
+	p = path.Clean(p)
+	p = strings.TrimPrefix(p, "/")
 
 	var parts []uint64
 
-	for _, partHex := range strings.Split(path, "/") {
+	for _, partHex := range strings.Split(p, "/") {
+		if recursive != "" && partHex == recursive {
+			parts = nil
+			continue
+		}
+
 		switch len(partHex) {
 		case 16:
 			part, err := strconv.ParseUint(partHex, 16, 64)
@@ -95,6 +96,12 @@ func baseHandler(res http.ResponseWriter, req *http.Request) {
 			notFound(res)
 			return
 		}
+	}
+
+	// Base dir
+	if len(parts) == 0 && req.Method == "GET" {
+		serveRootListing(res, "/"+p)
+		return
 	}
 
 	for i, part := range parts {

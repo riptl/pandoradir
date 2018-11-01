@@ -1,12 +1,12 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"hash/crc32"
 	"hash/crc64"
 	"log"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 )
@@ -45,25 +45,17 @@ func genLink(part uint64) string {
 	return fmt.Sprintf("%016x", part)
 }
 
-func genFullPath(ids []uint64) string {
-	var buf bytes.Buffer
-	for _, id := range ids {
-		buf.WriteString(fmt.Sprintf("/%016x", id))
+func serveRootListing(res http.ResponseWriter, dirPath string) {
+	info := templateInfo{
+		Path: dirPath,
 	}
-
-	switch byte(ids[len(ids)-1]) { // & 0xFF
-	case KindFile:
-		buf.WriteString(".bin")
-	case KindDir:
-		buf.WriteString("/")
-	}
-
-	return buf.String()
-}
-
-func serveRootListing(res http.ResponseWriter) {
-	info := templateInfo{Path: "/"}
 	genListingInfo(&info, 0)
+	if dirPath != "/" {
+		info.ParentDir = path.Dir(dirPath)
+		if !strings.HasSuffix(info.ParentDir, "/") {
+			info.ParentDir += "/"
+		}
+	}
 
 	res.Header().Set("content-type", "text/html")
 	res.WriteHeader(http.StatusOK)
@@ -79,7 +71,9 @@ func serveListing(res http.ResponseWriter, req *http.Request, ids []uint64) {
 		return
 	}
 
-	info := templateInfo{Path: genFullPath(ids)}
+	info := templateInfo{
+		Path: path.Clean(req.URL.Path),
+	}
 	pathNoTrailingSlash := strings.TrimSuffix(info.Path, "/")
 	lastSlash := strings.LastIndexByte(pathNoTrailingSlash, '/')
 	info.ParentDir = info.Path[:lastSlash+1]
@@ -97,12 +91,24 @@ func genListingInfo(info *templateInfo, lastID uint64) {
 	files := ids[:len(ids)/2]
 	dirs := ids[len(ids)/2:]
 
-	info.Dirs = make([]templateDir, len(dirs))
 	info.Files = make([]templateFile, len(files))
 
-	for i, dirId := range dirs {
+	if recursive != "" {
+		info.Dirs = append(info.Dirs, templateDir{
+			Link: "./" + recursive + "/",
+			Show: recursive + "/",
+			Pad:  recursivePad,
+			Time: "1912-04-15 05:18",
+		})
+	}
+
+	for _, dirId := range dirs {
+		dir := templateDir{}
+
 		// Name
-		info.Dirs[i].Link = genLink(dirId) + "/"
+		dir.Link = genLink(dirId) + "/"
+		dir.Show = dir.Link
+		dir.Pad = "    "
 
 		// Generate 8 bytes of random data
 		var extraData [8]byte
@@ -114,7 +120,9 @@ func genListingInfo(info *templateInfo, lastID uint64) {
 		timeUnix := int64(bin.Uint64(extraData[0:8]))
 		timeUnix %= maxTimestamp
 		timestamp := time.Unix(timeUnix, 0)
-		info.Dirs[i].Time = timestamp.Format("2006-01-02 15:04")
+		dir.Time = timestamp.Format("2006-01-02 15:04")
+
+		info.Dirs = append(info.Dirs, dir)
 	}
 
 	for i, fileId := range files {
